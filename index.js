@@ -1,7 +1,25 @@
 const mysql = require('mysql2/promise');
 const inquirer = require('inquirer');
+const Table = require('cli-table');
 
 let db;
+
+const logo = `.---------------------------------------------------.
+|                                                   |
+|   _____                 _                         |
+|  | ____|_ __ ___  _ __ | | ___  _   _  ___  ___   |
+|  |  _| | '_ \` _ \\| '_ \\| |/ _ \\| | | |/ _ \\/ _ \\  |
+|  | |___| | | | | | |_) | | (_) | |_| |  __/  __/  |
+|  |_____|_| |_| |_| .__/|_|\\___/ \\__, |\\___|\\___|  |
+|                  |_|            |___/             |
+|   __  __                                          |
+|  |  \\/  | __ _ _ __   __ _  __ _  ___ _ __        |
+|  | |\\/| |/ _\` | '_ \\ / _\` |/ _\` |/ _ \\ '__|       |
+|  | |  | | (_| | | | | (_| | (_| |  __/ |          |
+|  |_|  |_|\\__,_|_| |_|\\__,_|\\__, |\\___|_|          |
+|                            |___/                  |
+|                                                   |
+'---------------------------------------------------'`
 
 //main screen has: view all employees, add employee, update employee role, view all roles, add role, view
 //all departments, add department, and quit (and maybe update employee managers, view employees by manager,
@@ -15,36 +33,47 @@ const mainPromptChoices = ['View All Employees', 'Add Employee', 'Update Employe
 'Add Role', 'View All Departments', 'Add Department', 'Quit'];
 
 async function getEmployeeData(){
-    console.log("get employee data");
     const results = await db.query('SELECT emp.id, emp.first_name, emp.last_name, title, name AS department, salary, concat(man.first_name," ",man.last_name) AS manager'
     +' FROM employees AS emp JOIN roles ON emp.role_id = roles.id JOIN departments ON roles.department_id = departments.id LEFT OUTER JOIN employees AS man ON emp.manager_id = man.id');
     const employeeList = results[0];
-    console.log(employeeList);
     return employeeList;
 }
 
 async function getRoleData(){
-    console.log("get role data");
     const results = await db.query('SELECT roles.id, title, name AS department, salary FROM roles JOIN departments ON roles.department_id = departments.id');
     const roleList = results[0];
-    console.log(roleList);
     return roleList;
 }
 
 async function getDepartmentData(){
-    console.log("get department data");
     const results = await db.query('SELECT id, name FROM departments');
     const departmentList = results[0];
-    console.log(departmentList);
     return departmentList;
 }
 
 function displayTable(data){
-    console.table(data);
+    // need to convert the array of objects into an array of arrays, and also get the key values for use as headers
+    const dataArray = data.map((object)=> {
+        //for each object in the array, convert it into an array of values
+        return Object.values(object);
+    });
+    // need to convert null to 'null' because cli-table is stupid
+    // do a double layered map because it is an arrays of arrays
+    const fixedDataArray = dataArray.map((row) => {return row.map((value)=>{
+        // use double equals because it works for both null and undefined, if that ever comes up
+        // don't just check if it is a falsy value, because we could have 0 or empty string
+        // if it is null (or undefined), replace it with 'null', otherwise keep it the same
+        return (value==null ? 'null' : value);
+    })});
+    
+    const table = new Table({
+        head: Object.keys(data[0]),
+        rows: fixedDataArray
+    });
+    console.log(table.toString());
 }
 
 async function addEmployee(){
-    console.log("add employee");
     const namesResponse = await inquirer.prompt([{type: 'input', message: "What is the Employee's first name?", name: 'first', validate: (answer)=>{
             if (answer.trim().length<1 || answer.trim().length>30){
                 return "Name is too long or 0 length."
@@ -77,13 +106,11 @@ async function addEmployee(){
 }
 
 async function updateEmployeeRole(){
-    console.log("update employee role");
     // select employee
     const employees = (await db.query('SELECT id, concat(first_name," ",last_name) AS full_name FROM employees'))[0];
     const employeeNames = employees.map((employee)=> employee.full_name);
     const employeeResponse = await inquirer.prompt({type:'list', message: "Which Employee's role do you want to update?", name: 'employee', choices: employeeNames});
     const chosenEmployee = employees.find(x=> x.full_name===employeeResponse.employee).id;
-    console.log(chosenEmployee);
     // then select role
     const roles = (await db.query('SELECT id, title FROM roles'))[0];
     const roleTitles = roles.map((role) => role.title);
@@ -95,7 +122,6 @@ async function updateEmployeeRole(){
 }
 
 async function addRole(){
-    console.log("add role");
     const titleSalaryResponse = await inquirer.prompt([{type: 'input', message: 'What is the title of the Role?', name: 'role', validate: (answer)=>{
             if (answer.trim().length<1 || answer.trim().length>30){
                 return "Title is too long or 0 length."
@@ -118,7 +144,6 @@ async function addRole(){
 }
 
 async function addDepartment(){
-    console.log("add department");
     const response = await inquirer.prompt({type: 'input', message: 'What is the name of the Department?', name: 'department', validate: (answer)=>{
             if (answer.trim().length<1 || answer.trim().length>30){
                 return "Name is too long or 0 length."
@@ -188,7 +213,7 @@ async function mainProgram(){
             database: 'employees_db'
         },
     );
-    // display the fancy logo thing, then...
+    console.log(logo);
     await mainPrompt();
     await db.end();
 }
